@@ -3,3 +3,6 @@
 
 # vim backup files
 *~
+
+# freecad backup files
+*.fcstd1
