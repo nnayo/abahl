@@ -1,0 +1,11 @@
+== abahl : a TRoll project
+.This a flying wing drone : 
+* made from scratch
+* done with freecad
+* with most pieces 3D printed
+
+_Miscellaneous_
+
+The wing profile (airfoil) is E186
+
+
