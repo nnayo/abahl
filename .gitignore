@@ -1,0 +1,5 @@
+# python byte-compiled / optimized / DLL files
+*.py[cod]
+
+# vim backup files
+*~
