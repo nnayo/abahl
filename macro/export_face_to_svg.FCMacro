@@ -1,0 +1,242 @@
+# -*- coding: utf-8 -*-
+
+# Macro Begin: /home/yog/TRoll/tools/freecad_macros/export_face_to_svg.FCMacro +++++++++++++++++++++++++++++++++++++++++++++++++
+import FreeCAD
+import sys
+import math
+
+error = FreeCAD.Console.PrintError
+msg = FreeCAD.Console.PrintMessage
+
+
+class Face():
+	svg_format = """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created by export_face_to_svg FreeCAD macro -->
+<!-- File format base on inkscape -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   width="1000mm"
+   height="500mm"
+   viewBox="0 0 1000 500"
+   id="svg2"
+   version="1.1">
+  <defs
+     id="defs4" />
+  <metadata
+     id="metadata7">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+        <cc:license
+           rdf:resource="http://creativecommons.org/licenses/by-nc-sa/3.0/" />
+      </cc:Work>
+      <cc:License
+         rdf:about="http://creativecommons.org/licenses/by-nc-sa/3.0/">
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Reproduction" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Distribution" />
+        <cc:requires
+           rdf:resource="http://creativecommons.org/ns#Notice" />
+        <cc:requires
+           rdf:resource="http://creativecommons.org/ns#Attribution" />
+        <cc:prohibits
+           rdf:resource="http://creativecommons.org/ns#CommercialUse" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#DerivativeWorks" />
+        <cc:requires
+           rdf:resource="http://creativecommons.org/ns#ShareAlike" />
+      </cc:License>
+    </rdf:RDF>
+  </metadata>
+  <g
+     id="layer1">
+%s
+  </g>
+</svg>
+"""
+	# svg path contains :
+	#  - the id of the path (it shall be uniq)
+	#  - the path of the wire as pair x,y space separated (the unit is the mm)
+	#      for example : d="M 0.0,0.0 100.0,100.0 100.0,0.0"
+	svg_path = """
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.1mm;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       d="M %s"
+       id="%s" />
+"""
+	def __init__(self):
+		"""return the selected face if any"""
+		# retrieve selected face
+		selection = Gui.Selection.getSelectionEx()
+		if selection == []:
+			error('nothing selected\n')
+			sys.exit(-1)
+
+		self._name = selection[0].ObjectName
+		objs = selection[0].SubObjects
+		face = objs[0]
+
+		if face.ShapeType != 'Face':
+			error('selected item is not a face : %s\n' % face.ShapeType)
+			sys.exit(-2)
+
+		self._face = Part.Face(face)
+
+	def _place(self):
+		"""modify face placement to make its normal vector is Y axis"""
+		self._origin_vector = App.Vector(0, 0, 0)
+
+		# retrieve normal vector
+		normal = self._face.normalAt(0, 0)
+		y_axis = App.Vector(0, 1, 0)
+
+		# rotate the face normal to Y+
+		self._rotation = App.Rotation(normal, y_axis)
+
+		rot_vect = self._rotation.Axis
+		rot_angle = self._rotation.Angle * 180 / math.pi
+		self._face.rotate(self._origin_vector, rot_vect, rot_angle)
+
+		# ensure the face is the X+, Z+ sector
+		box = self._face.BoundBox
+		self._face.translate(App.Vector(-box.XMin, 0, -box.ZMin))
+
+	def export(self):
+		"""export the face to a file named from its name"""
+		# create the svg file
+		full_name = '/tmp/' + self._name + '.svg'
+		msg('the svg file is : %s\n' % full_name)
+
+		svg_file = open(full_name, 'w')
+
+		# place the face
+		self._place()
+
+		# retrieve the face paths
+		svg_paths = ''
+		for w in self._face.Wires:
+			svg_paths += self._export_wire(w)
+
+		# fulfill the file then close it
+		svg_file.write(self.svg_format % svg_paths)
+		svg_file.close()
+
+		msg('%s saved\n' % full_name)
+
+	def _export_wire(self, w):
+		"""export the edges of the given wire"""
+		msg('wire : %r : ' % w)
+
+		bb = w.BoundBox
+		dx = bb.XMax - bb.XMin
+		dz = bb.ZMax - bb.ZMin
+
+		if len(w.Edges) == 1 and w.Edges[0].isClosed():
+			msg('ellipse : dx, dz = %.1f, %.1f\n' % (dx, dz))
+			return self._export_ellipse(w)
+		else:		
+			msg('segment : dx, dz = %.1f, %.1f\n' % (dx, dz))
+			return self._export_segments(w)
+
+	@staticmethod
+	def _edge_discretize(e):
+		bb = e.BoundBox
+		dx = bb.XMax - bb.XMin
+		dz = bb.ZMax - bb.ZMin
+		discret = e.discretize(int(3 * (dx + dz)))
+		return [Part.Vertex(d) for d in discret]
+
+	def _export_ellipse(self, w):
+		"""export the edge of the wire as an discretized ellipse"""
+		svg_path = ''
+		e = w.Edges[0]
+		for v in self._edge_discretize(e):
+			svg_path += '%.1f,%.1f ' % (v.X, v.Z)
+
+		return self.svg_path % (svg_path, id(w))
+
+	@staticmethod
+	def _are_near(v0, v1, tolerance=1e-4):
+		"""test if 2  vertexes is near"""
+		return abs(v0.X - v1.X) + abs(v0.Y - v1.Y) + abs(v0.Z - v1.Z) < tolerance 
+
+	def _export_segments(self, w):
+		"""export the segments of the wire"""
+		svg_path = ''
+
+		# replace curved edge by discretized edges
+		edges = []
+		for e in w.Edges:
+			if e.curvatureAt(0) < 1e-5:
+				edges.append(e)
+			else:
+				discret = self._edge_discretize(e)
+				#msg('discret = %d' % len(discret))
+				for d0, d1 in zip(discret[:-1], discret[1:]):
+				#	msg('d0 = (%.1f, %.1f), d1 = (%.1f, %.1f)\n' % (d0.X, d0.Z, d1.X, d1.Z)) 
+					edges.append(Part.Edge(d0, d1))
+				#msg('%d\t' % len(edges))
+				#msg('%r\n' % edges)
+
+		# the edge list is not sorted
+		# so, sort it
+		e0 = edges[0]
+		sorted_vertexes = [e0.Vertexes[0], e0.Vertexes[1], ]
+		edges.pop(0)
+		for _ in range(len(edges)):
+#			if len(edges) < 6:
+#				msg('e = ')
+#				for e in edges:
+#					msg('(%.2f, %.2f)-(%.2f, %.2f), ' % (e.Vertexes[0].X, e.Vertexes[0].Z, e.Vertexes[1].X, e.Vertexes[1].Z))
+#				msg('\n')
+#			msg('len edges = %d\n' % len(edges))
+			v = sorted_vertexes[-1]
+#			msg('v[-1] = (%.2f, %.2f) : ' % (v.X, v.Z))
+			for i in range(len(edges)):
+				e = edges[i]
+				ev0 = e.Vertexes[0]
+				ev1 = e.Vertexes[1]
+				#msg('v = %r, ev0 = %r, ev1 = %r\n' % (v, ev0, ev1))
+
+				#if ev0.X == v.X and ev0.Z == v.Z:
+				if self._are_near(ev0, v):
+					sorted_vertexes.append(ev1)
+#					msg('ev0 = (%.2f, %.2f), ev1 = (%.2f, %.2f) -> ' % (ev0.X, ev0.Z, ev1.X, ev1.Z))
+#					msg('ev1\n')
+					edges.pop(i)
+					break
+				#if ev1.X == v.X and ev1.Z == v.Z:
+				if self._are_near(ev1, v):
+					sorted_vertexes.append(ev0)
+#					msg('ev0 = (%.2f, %.2f), ev1 = (%.2f, %.2f) -> ' % (ev0.X, ev0.Z, ev1.X, ev1.Z))
+#					msg('ev0\n')
+					edges.pop(i)
+					break
+
+		for v in sorted_vertexes:
+			svg_path += '%.1f,%.1f ' % (v.X, v.Z)
+
+		# close the path with the first vertex
+		v0 = w.Vertexes[0]
+		svg_path += '%.1f,%.1f ' % (v0.X, v0.Z)
+		#msg('path = %s\n' % svg_path)
+
+		return self.svg_path % (svg_path, id(w))
+
+msg('\n\n\n-------------------------------------------------------------------\n')
+
+face = Face().export()
+
+
+# Macro End: /home/yog/TRoll/tools/freecad_macros/export_face_to_svg.FCMacro +++++++++++++++++++++++++++++++++++++++++++++++++
+	
