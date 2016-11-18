@@ -30,6 +30,8 @@ from FreeCAD import Base
 from pivy import coin
 
 import math
+import numpy as np
+from scipy.interpolate import InterpolatedUnivariateSpline
 
 class E186Profile:
     # Airfoil name : E186  (10,27%)
@@ -157,12 +159,25 @@ class E186Profile:
         solid = Part.Solid(shell)
         fp.Shape = solid
 
-        shell = Part.Shell(surf01.Faces + surf12.Faces + surf23.Faces + surf34.Faces + surf45.Faces)
-        fp.Shape = shell
+        #shell = Part.Shell(surf01.Faces + surf12.Faces + surf23.Faces + surf34.Faces + surf45.Faces)
+        #fp.Shape = shell
 
     def e186_profile(self, cord, low_ratio, up_ratio, pos, revert=False):
         """create a wire with a E186 profile with upper casing"""
         profile = list(E186Profile.profile)
+        x, y = zip(*profile)
+
+        t = np.linspace(0, 1, len(profile))
+        x_spl = InterpolatedUnivariateSpline(t, x)
+        y_spl = InterpolatedUnivariateSpline(t, y)
+
+        smoothness = 500
+        t = np.linspace(0, 1, smoothness)
+        x = [x_spl(_t) for _t in t]
+        y = [y_spl(_t) for _t in t]
+
+        profile = zip(x, y)
+
         if revert:
             profile.reverse()
 
@@ -183,6 +198,7 @@ class E186Profile:
         face = Part.Face(Part.makePolygon(vectors))
         wire = face.Wires[0]
         return face, wire
+
 
 class ViewProviderE186Profile:
     def __init__(self, obj):
@@ -261,9 +277,7 @@ class ViewProviderE186Profile:
         """
         return None
 
-
-# create ramjet in current document
+# create E186 profile casing in current document
 a = FreeCAD.ActiveDocument.addObject('Part::FeaturePython', 'e186')
 E186Profile(a)
 ViewProviderE186Profile(a.ViewObject)
-
