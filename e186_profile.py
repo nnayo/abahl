@@ -162,6 +162,19 @@ class E186Profile:
         # compute dimensions
         if fp.up_only:
             profile = E186Profile.profile_up
+
+            x, y = zip(*profile)
+
+            t = np.linspace(0, 1, len(profile))
+            x_spl = InterpolatedUnivariateSpline(t, x)
+            y_spl = InterpolatedUnivariateSpline(t, y)
+
+            t = np.linspace(0, 1, fp.smoothness)
+            x = [x_spl(_t) for _t in t]
+            y = [y_spl(_t) for _t in t]
+
+            profile = zip(x, y)
+
             reverse = list(profile)
             reverse.reverse()
 
@@ -177,7 +190,6 @@ class E186Profile:
             for (x, z) in reverse:
                 vectors0.append(FreeCAD.Vector(-x * x_ratio + pos.x, 0 + pos.y, z * z_ratio + pos.z))
             vectors0.append(vectors0[0])    # close the wire
-            #FreeCAD.Console.PrintMessage('vectors0 = %r\n' % vectors0)
 
             x_ratio = float(fp.side1_cord) / 100.
             z_ratio = fp.side1_ratio
@@ -195,10 +207,6 @@ class E186Profile:
         else:
             profile = E186Profile.profile
 
-            x_ratio = float(fp.side0_cord) / 100.
-            z_ratio = fp.side0_ratio
-            pos = fp.side0_position
-
             x, y = zip(*profile)
 
             t = np.linspace(0, 1, len(profile))
@@ -211,10 +219,14 @@ class E186Profile:
 
             profile = zip(x, y)
 
+            x_ratio = float(fp.side0_cord) / 100.
+            z_ratio = fp.side0_ratio
+            pos = fp.side0_position
+
             vectors0 = []
             for (x, z) in profile:
                 vectors0.append(FreeCAD.Vector(-x * x_ratio + pos.x, 0 + pos.y, z * z_ratio + pos.z))
-                FreeCAD.Console.PrintMessage('x, z = %f, %f\n' % (x, z))
+                #FreeCAD.Console.PrintMessage('x, z = %f, %f\n' % (x, z))
 
             x_ratio = float(fp.side1_cord) / 100.
             z_ratio = fp.side1_ratio
